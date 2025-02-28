@@ -11,7 +11,7 @@
 */
 
 volatile uint32_t HEtr ;
-volatile uint32_t EtrFreq ;
+volatile uint32_t EtrFreq, EtrOld ;
 volatile uint8_t DataReady = 0;
 char str[17] ;
 
@@ -31,34 +31,18 @@ etr_init();
 pwm_init();
 while(1) if( DataReady )
 	{
+	led_toggle();
+	if( EtrFreq != EtrOld )
+	{
+	EtrOld = EtrFreq ;
 	hd44780_clear();
 	hd44780_pos(0, 0);
 	itoa((int)EtrFreq, str, 10) ;
 	hd44780_string(str);
+	}
 	DataReady = 0 ;
 	}
 }
-
-/*
-*       T E S T   P W M   S I G N A L
-*/
-
-void pwm_init( void ){ // pwm tim17 ch1 af5 pa7 (13)
-  RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
-  GPIOA->MODER &= ~GPIO_MODER_MODER7; // reset
-  GPIOA->MODER |= GPIO_MODER_MODER7_1; // AF
-  GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR7_1|GPIO_OSPEEDR_OSPEEDR7_0; // HIGH SPEED
-  GPIOA->AFR[0] |= 5 << GPIO_AFRL_AFSEL7_Pos; // PA7 AF5
-  RCC->APB2ENR    |= RCC_APB2ENR_TIM17EN; // clocking TIM
-  TIM17->PSC        = 1 - 1;
-  TIM17->ARR        = 48 - 1;
-  TIM17->CCR1       = TIM17->ARR / 2  ;
-  TIM17->CCMR1      |= TIM_CCMR1_OC1M_2|TIM_CCMR1_OC1M_1|TIM_CCMR1_OC1M_0 ; // pwm mode 2
-  TIM17->CCER       |= TIM_CCER_CC1E ;    // CC1 output enable
-  TIM17->BDTR       |= TIM_BDTR_MOE ;
-  TIM17->CR1        |= TIM_CR1_CEN ; // enable timer
-}
-
 
 /*
 *           G A T E  &  E T R
@@ -79,25 +63,28 @@ void etr_init( void ){ // TIM1 ETR in PA12 AF2
   TIM1->SMCR	|= TIM_SMCR_ECE; //ext. clock mode2 enabled, counter is clocked by ETRF signal
   TIM1->SMCR	|= TIM_SMCR_TS_1; // 010 internal trigger 2 (TIM3)
   TIM1->SMCR	|= TIM_SMCR_SMS_2|TIM_SMCR_SMS_0; // 101 - gated mode, while trigger input (TRGI) is high, counter is on
+  TIM1->SMCR    |= TIM_SMCR_ETPS_1|TIM_SMCR_ETPS_0 ; // etr prescaler 8
   TIM1->DIER     |= TIM_DIER_UIE; //enable interrupt (инкремент переменной старшего разряда)
   TIM1->CR1        |= TIM_CR1_CEN ; // enable
   NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
-  //NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 2); // low
+  NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 1);
   RCC->APB1ENR    |= RCC_APB1ENR_TIM3EN; // clocking TIM3
-  TIM3->PSC	= 48000 - 1; // ~ 48000000 / 48000 = 1000 Hz
-  TIM3->ARR = 1000 - 1; // 1000 / 1000 = 1 Hz.
+  TIM3->PSC	= 50000 - 1; // ~ 48000000 / 48000 = 1000 Hz
+  TIM3->ARR 	= 1000 - 1; // 1000 / 1000 = 1 Hz.
   TIM3->CR1	|= TIM_CR1_DIR; // used as downcounter
   TIM3->CR2	|= TIM_CR2_MMS_0 ; // use update as TRGO
   TIM3->DIER    |= TIM_DIER_UIE; // enable interrupt
   TIM3->CR1	|= TIM_CR1_CEN ; // enable
   NVIC_EnableIRQ(TIM3_IRQn);
-  //NVIC_SetPriority(TIM3_IRQn, 0); // high
+  NVIC_SetPriority(TIM3_IRQn, 0);
 }
 
 void TIM3_IRQHandler(void){ // измерительный интервал
         TIM3->SR = ~TIM_SR_UIF; // reset interrupt flag
-        EtrFreq = ( (HEtr << 16) | ( TIM1->CNT) ) ;
+        EtrFreq = TIM1->CNT ;
         TIM1->CNT = 0 ;
+        EtrFreq |= ( HEtr << 16 ) ;
+	EtrFreq *= 8 ; // cause prescaled 8
         HEtr = 0 ;
         DataReady = 1 ; // Etr variable is ready
 }
@@ -205,29 +192,19 @@ void hd44780_init(void){
 RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
   RSd; RWd; Ed; // commands
   delay_ms(15); // initialization
-  hd44780_command(3);
-  delay_ms(5);
-  hd44780_command(3);
-  delay_ms(1);
-  hd44780_command(3);
-  delay_ms(1);
-  hd44780_command(2);
-  delay_ms(1);
+  hd44780_command(3);  delay_ms(5);  hd44780_command(3);  delay_ms(1);
+  hd44780_command(3);  delay_ms(1);  hd44780_command(2);  delay_ms(1);
   hd44780_command(2); // function set 4-bit, 2-lines, 5x8 dots
-  hd44780_command(8);
-  while(bf());
+  hd44780_command(8);  while(bf());
   hd44780_command(0); // display off, cursor off, blinking off
   hd44780_command(8); // похоже это лишняя комнда
   while(bf());
   hd44780_command(0); // clear display
-  hd44780_command(1);
-  while(bf());
+  hd44780_command(1);  while(bf());
   hd44780_command(0); // entry mode set: increment ddram w/o shift
-  hd44780_command(6);
-  while(bf());
+  hd44780_command(6);  while(bf());
   hd44780_command(0); // display on w/o cursor w/o blinking
-  hd44780_command(12);
-  while(bf());
+  hd44780_command(12);  while(bf());
 }
 
 /*
@@ -241,7 +218,7 @@ void bias_init( void ){ // pwm tim14 ch1 af4 pa4
   GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR4_1|GPIO_OSPEEDR_OSPEEDR4_0; // HIGH SPEED
   GPIOA->AFR[0] |= 4 << GPIO_AFRL_AFSEL4_Pos; // PA4 AF4
   RCC->APB1ENR    |= RCC_APB1ENR_TIM14EN; // clocking TIM
-  TIM14->PSC        = 48 - 1;
+  TIM14->PSC        = 50 - 1;
   TIM14->ARR        = 100 - 1;
   TIM14->CCR1       = 5  ; // duty -300..400 mV
   TIM14->CCMR1      |= TIM_CCMR1_OC1M_2|TIM_CCMR1_OC1M_1|TIM_CCMR1_OC1M_0 ; // pwm mode 2
@@ -250,20 +227,44 @@ void bias_init( void ){ // pwm tim14 ch1 af4 pa4
 }
 
 /*
-*   RCC
+*       T E S T   P W M   S I G N A L
 */
 
-void clock_init(void){
-        FLASH->ACR |= (1<<4); // enables prefetch buffer
-        FLASH->ACR &= ~(0b111<<0); // clears latency location
-        FLASH->ACR |= (0b001<<0); // set latency to 24 - 48 MHz
-	RCC->CR &= ~(1 << 24); // PLL off
-        while( (RCC->CR & (1<<25) ) ); // wait PLL stop
-        RCC->CFGR |= (0b1010 << 18); // PLL = 8/2 x 12 = 48 MHz
-        RCC->CR |= (1 << 24); // PLL on
-        while( !(RCC->CR & (1<<25) ) ); // wait PLL ready
-        RCC->CFGR |= (0b10 << 0); // set PLL as system clock
-        while ( !((RCC->CFGR) & (0b10 << 2)) ); // wait till clock switched to PLL
+void pwm_init( void ){ // pwm tim17 ch1 af5 pa7 (13)
+  RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
+  GPIOA->MODER &= ~GPIO_MODER_MODER7; // reset
+  GPIOA->MODER |= GPIO_MODER_MODER7_1; // AF
+  GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR7_1|GPIO_OSPEEDR_OSPEEDR7_0; // HIGH SPEED
+  GPIOA->AFR[0] |= 5 << GPIO_AFRL_AFSEL7_Pos; // PA7 AF5
+  RCC->APB2ENR    |= RCC_APB2ENR_TIM17EN; // clocking TIM
+  TIM17->PSC        = 0;
+  TIM17->ARR        = 1;
+  TIM17->CCR1       = 1  ;
+  TIM17->CCMR1      |= TIM_CCMR1_OC1M_2|TIM_CCMR1_OC1M_1|TIM_CCMR1_OC1M_0 ; // pwm mode 2
+  TIM17->CCER       |= TIM_CCER_CC1E ;    // CC1 output enable
+  TIM17->BDTR       |= TIM_BDTR_MOE ;
+  TIM17->CR1        |= TIM_CR1_CEN ; // enable timer
+}
+
+/*
+*               R C C
+*/
+
+void clock_init(void){ // HSE PLL 50 Mhz
+	RCC->CR |= RCC_CR_HSEON ;
+	while( !( RCC->CR & RCC_CR_HSERDY ) ) ; // wait hse ready
+	RCC->CR &= ~RCC_CR_PLLON ;
+        while( RCC->CR & RCC_CR_PLLRDY );
+	RCC->CFGR |= RCC_CFGR_PLLSRC; // PLL src HSE (25 MHz)
+	RCC->CFGR2 &= ~RCC_CFGR2_PREDIV ; // reset
+        RCC->CFGR2 |= RCC_CFGR2_PREDIV_2 ; // /5 (5MHz)
+        RCC->CFGR &= ~RCC_CFGR_PLLMUL ; // reset
+	RCC->CFGR |= RCC_CFGR_PLLMUL_3 ; // x10 (50 MHz)
+	RCC->CR |= RCC_CR_PLLON ;
+	while( !(RCC->CR & RCC_CR_PLLRDY ) );
+	FLASH->ACR |= FLASH_ACR_LATENCY ;
+	RCC->CFGR |= RCC_CFGR_SW_1 ;
+	while ( !(RCC->CFGR & RCC_CFGR_SWS_1 ) );
 }
 
 
@@ -287,6 +288,12 @@ GPIOA->BSRR  |= GPIO_BSRR_BR_5;
 GPIOA->BSRR  |= GPIO_BSRR_BS_6;
 }
 
+void led_toggle(void)
+{
+if( GPIOA->IDR & GPIO_IDR_5 ) led_off() ;
+else led_on() ;
+}
+
 void delay_ms( volatile uint32_t d ){
   d *= 10000 ;
   for( volatile uint32_t i = 0; i < d; i++ ){}
@@ -297,4 +304,6 @@ void delay_us( volatile uint32_t d ){
   for( volatile uint32_t i = 0; i < d; i++ ){}
 }
 
-/* EOF */
+/*
+* EOF EOF EOF EOF EOF EOF EOF EOF EOF EOF EOF EOF EOF
+*/

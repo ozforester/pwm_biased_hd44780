@@ -25,5 +25,6 @@ void delay_ms( volatile uint32_t );
 void delay_us( volatile uint32_t );
 void led_on( void );
 void led_off( void );
+void led_toggle( void );
 
 #endif
