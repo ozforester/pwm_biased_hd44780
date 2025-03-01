@@ -250,7 +250,7 @@ void pwm_init( void ){ // pwm tim17 ch1 af5 pa7 (13)
 *               R C C
 */
 
-void clock_init(void){ // HSE PLL 50 Mhz
+void clock_init(void){ // тактирование от HSE через PLL 50 Mhz
 	RCC->CR |= RCC_CR_HSEON ;
 	while( !( RCC->CR & RCC_CR_HSERDY ) ) ; // wait hse ready
 	RCC->CR &= ~RCC_CR_PLLON ;
@@ -305,5 +305,5 @@ void delay_us( volatile uint32_t d ){
 }
 
 /*
-* EOF EOF EOF EOF EOF EOF EOF EOF EOF EOF EOF EOF EOF
+* EOF EOF EOF EOF
 */
