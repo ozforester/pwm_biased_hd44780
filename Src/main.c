@@ -21,19 +21,12 @@ char str[17] ;
 
 int main()
 {
-//led_on();
 clock_init();
 bias_init();
 hd44780_init();
 hd44780_string("ozforester");
 delay_ms(100);
 etr_init();
-pwm_init();
-/* Измерение частоты умышеленно упрощено. Это необходимо для свободы выбора последующих решений.
-* Так же включен делитель на восемь для входа тактирования таймера, что одновременно снижает точность,
-* и позволяет подавать на вход сигнал с большей в восем раз частотой. Пример предназначался для разбора
-* и понимания принципов использования микроконтроллера в любительском творчестве.
-*/
 while(1) if( DataReady )
 	{
 	led_toggle();
@@ -101,7 +94,7 @@ void TIM3_IRQHandler(void){ // измерительный интервал
 * RS  - PA1 -> (W)
 * RW  - PA2 ->
 * E   - PA3 ->
-* D4  - PA8 <-> (R/W)
+* D4  - PA7 <-> (R/W)
 * D5  - PA9 <->
 * D6  - PA10 <->
 * D7  - PA11 <->
@@ -115,18 +108,16 @@ void TIM3_IRQHandler(void){ // измерительный интервал
 #define RWd GPIOA->MODER |= GPIO_MODER_MODER2_0; GPIOA->BSRR  |= GPIO_BSRR_BR_2;
 #define Eu GPIOA->MODER |= GPIO_MODER_MODER3_0; GPIOA->BSRR  |= GPIO_BSRR_BS_3;
 #define Ed GPIOA->MODER |= GPIO_MODER_MODER3_0; GPIOA->BSRR  |= GPIO_BSRR_BR_3;
-
 // data
-#define D4u GPIOA->MODER |= GPIO_MODER_MODER8_0; GPIOA->BSRR  |= GPIO_BSRR_BS_8;
-#define D4d GPIOA->MODER |= GPIO_MODER_MODER8_0; GPIOA->BSRR  |= GPIO_BSRR_BR_8;
+#define D4u GPIOA->MODER |= GPIO_MODER_MODER7_0; GPIOA->BSRR  |= GPIO_BSRR_BS_7;
+#define D4d GPIOA->MODER |= GPIO_MODER_MODER7_0; GPIOA->BSRR  |= GPIO_BSRR_BR_7;
 #define D5u GPIOA->MODER |= GPIO_MODER_MODER9_0; GPIOA->BSRR  |= GPIO_BSRR_BS_9;
 #define D5d GPIOA->MODER |= GPIO_MODER_MODER9_0; GPIOA->BSRR  |= GPIO_BSRR_BR_9;
 #define D6u GPIOA->MODER |= GPIO_MODER_MODER10_0; GPIOA->BSRR  |= GPIO_BSRR_BS_10;
 #define D6d GPIOA->MODER |= GPIO_MODER_MODER10_0; GPIOA->BSRR  |= GPIO_BSRR_BR_10;
 #define D7u GPIOA->MODER |= GPIO_MODER_MODER11_0; GPIOA->BSRR  |= GPIO_BSRR_BS_11;
 #define D7d GPIOA->MODER |= GPIO_MODER_MODER11_0; GPIOA->BSRR  |= GPIO_BSRR_BR_11;
-
-#define Dz GPIOA->MODER &= 0xff00ffff
+#define Dz GPIOA->MODER &= 0xff033fff ;
 #define Di ( GPIOA->IDR & GPIO_IDR_11 ) // read d7
 
 int bf( void ){
@@ -232,30 +223,14 @@ void bias_init( void ){ // pwm tim14 ch1 af4 pa4
 }
 
 /*
-*       T E S T   P W M   S I G N A L
-*/
-
-void pwm_init( void ){ // pwm tim17 ch1 af5 pa7 (13)
-  RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
-  GPIOA->MODER &= ~GPIO_MODER_MODER7; // reset
-  GPIOA->MODER |= GPIO_MODER_MODER7_1; // AF
-  GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR7_1|GPIO_OSPEEDR_OSPEEDR7_0; // HIGH SPEED
-  GPIOA->AFR[0] |= 5 << GPIO_AFRL_AFSEL7_Pos; // PA7 AF5
-  RCC->APB2ENR    |= RCC_APB2ENR_TIM17EN; // clocking TIM
-  TIM17->PSC        = 0;
-  TIM17->ARR        = 1;
-  TIM17->CCR1       = 1  ;
-  TIM17->CCMR1      |= TIM_CCMR1_OC1M_2|TIM_CCMR1_OC1M_1|TIM_CCMR1_OC1M_0 ; // pwm mode 2
-  TIM17->CCER       |= TIM_CCER_CC1E ;    // CC1 output enable
-  TIM17->BDTR       |= TIM_BDTR_MOE ;
-  TIM17->CR1        |= TIM_CR1_CEN ; // enable timer
-}
-
-/*
 *               R C C
 */
 
-void clock_init(void){ // тактирование от HSE через PLL 50 Mhz
+void clock_init(void){ // HSE PLL 50 Mhz -------- MCO PA8 (18) AF AF0
+  RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
+  GPIOA->MODER &= ~GPIO_MODER_MODER8; // reset
+  GPIOA->MODER |= GPIO_MODER_MODER8_1; // AF
+  GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR8_1|GPIO_OSPEEDR_OSPEEDR8_0; // HIGH SPEED
 	RCC->CR |= RCC_CR_HSEON ;
 	while( !( RCC->CR & RCC_CR_HSERDY ) ) ; // wait hse ready
 	RCC->CR &= ~RCC_CR_PLLON ;
@@ -264,12 +239,13 @@ void clock_init(void){ // тактирование от HSE через PLL 50 Mh
 	RCC->CFGR2 &= ~RCC_CFGR2_PREDIV ; // reset
         RCC->CFGR2 |= RCC_CFGR2_PREDIV_2 ; // /5 (5MHz)
         RCC->CFGR &= ~RCC_CFGR_PLLMUL ; // reset
-	RCC->CFGR |= RCC_CFGR_PLLMUL_3 ; // x10 (50 MHz)
+        RCC->CFGR |= RCC_CFGR_PLLMUL_3 ; // x10 (50 MHz)
 	RCC->CR |= RCC_CR_PLLON ;
 	while( !(RCC->CR & RCC_CR_PLLRDY ) );
 	FLASH->ACR |= FLASH_ACR_LATENCY ;
 	RCC->CFGR |= RCC_CFGR_SW_1 ;
 	while ( !(RCC->CFGR & RCC_CFGR_SWS_1 ) );
+        RCC->CFGR |= RCC->CFGR |= RCC_CFGR_MCO_PLL|RCC_CFGR_PLLNODIV|RCC_CFGR_MCOPRE_DIV1 ; // MCO
 }
 
 
@@ -309,6 +285,4 @@ void delay_us( volatile uint32_t d ){
   for( volatile uint32_t i = 0; i < d; i++ ){}
 }
 
-/*
-* EOF EOF EOF EOF
-*/
+/* EOF */
