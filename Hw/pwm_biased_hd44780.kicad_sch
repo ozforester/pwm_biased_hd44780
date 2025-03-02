@@ -1853,7 +1853,7 @@
     (property "Reference" "Y2" (at 82.55 73.66 90)
       (effects (font (size 1.27 1.27)) (justify right))
     )
-    (property "Value" "27MHz" (at 86.36 73.66 90)
+    (property "Value" "25MHz" (at 86.36 73.66 90)
       (effects (font (size 1.27 1.27)) (justify right))
     )
     (property "Footprint" "Crystal:Crystal_SMD_2520-4Pin_2.5x2.0mm" (at 97.79 73.66 0)
