@@ -2,4 +2,4 @@
 uc stm32f030k6t6/lcd hd44780/hw (kicad)<br>
 tune bias with TIM14 duty cycle<br>
 ![plot](./schematics.jpg)
-![plot](./breadboard.jpg)
+![plot](./breadboard.png)
