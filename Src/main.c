@@ -25,7 +25,6 @@ clock_init();
 bias_init();
 hd44780_init();
 hd44780_string("ozforester");
-delay_ms(100);
 etr_init();
 while(1) if( DataReady )
 	{
@@ -39,6 +38,7 @@ while(1) if( DataReady )
 	hd44780_string(str);
 	}
 	DataReady = 0 ;
+	TIM3->CR1 |= TIM_CR1_CEN ;
 	}
 }
 
@@ -69,7 +69,7 @@ void etr_init( void ){ // TIM1 ETR in PA12 AF2
   RCC->APB1ENR    |= RCC_APB1ENR_TIM3EN; // clocking TIM3
   TIM3->PSC	= 50000 - 1; // ~ 48000000 / 48000 = 1000 Hz
   TIM3->ARR 	= 1000 - 1; // 1000 / 1000 = 1 Hz.
-  TIM3->CR1	|= TIM_CR1_DIR; // used as downcounter
+  TIM3->CR1	|= TIM_CR1_OPM|TIM_CR1_DIR; // once as downcounter
   TIM3->CR2	|= TIM_CR2_MMS_0 ; // use update as TRGO
   TIM3->DIER    |= TIM_DIER_UIE; // enable interrupt
   TIM3->CR1	|= TIM_CR1_CEN ; // enable
@@ -78,9 +78,11 @@ void etr_init( void ){ // TIM1 ETR in PA12 AF2
 }
 
 void TIM3_IRQHandler(void){ // измерительный интервал
+  	TIM1->CR1  &= ~TIM_CR1_CEN ; // disable
         TIM3->SR = ~TIM_SR_UIF; // reset interrupt flag
         EtrFreq = TIM1->CNT ;
         TIM1->CNT = 0 ;
+  	TIM1->CR1        |= TIM_CR1_CEN ; // enable
         EtrFreq |= ( HEtr << 16 ) ;
 	EtrFreq *= 8 ; // cause prescaled 8
         HEtr = 0 ;
@@ -139,8 +141,9 @@ void hd44780_nibble( uint8_t data ){
   if(data & 0b0001){ D4u }
   else { D4d }
   Eu;
-  delay_ms(1);
+  delay_us(500);
   Ed;
+  delay_us(500);
 }
 
 void hd44780_data( uint8_t data ){
@@ -188,13 +191,13 @@ void hd44780_init(void){
 RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
   RSd; RWd; Ed; // commands
   delay_ms(15); // initialization
-  hd44780_command(3);  delay_ms(5);  hd44780_command(3);  delay_ms(1);
-  hd44780_command(3);  delay_ms(1);  hd44780_command(2);  delay_ms(1);
+  hd44780_command(3);  delay_ms(5);
+  hd44780_command(3);  delay_us(100); hd44780_command(3);
+  hd44780_command(2);  while(bf());
   hd44780_command(2); // function set 4-bit, 2-lines, 5x8 dots
   hd44780_command(8);  while(bf());
-  hd44780_command(0); // display off, cursor off, blinking off
-  hd44780_command(8); // похоже это лишняя комнда
-  while(bf());
+  hd44780_command(0);  // display off, cursor off, blinking off
+  hd44780_command(8);  while(bf());
   hd44780_command(0); // clear display
   hd44780_command(1);  while(bf());
   hd44780_command(0); // entry mode set: increment ddram w/o shift
@@ -276,12 +279,12 @@ else led_on() ;
 }
 
 void delay_ms( volatile uint32_t d ){
-  d *= 10000 ;
+  d *= 5000 ;
   for( volatile uint32_t i = 0; i < d; i++ ){}
 }
 
 void delay_us( volatile uint32_t d ){
-  d *= 10 ;
+  d *= 5 ;
   for( volatile uint32_t i = 0; i < d; i++ ){}
 }
 
