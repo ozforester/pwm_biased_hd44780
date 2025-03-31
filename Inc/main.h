@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+void pwm_init( void );
 void etr_init( void );
 void hd44780_init(void);
 void hd44780_nibble( uint8_t );
