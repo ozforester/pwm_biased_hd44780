@@ -23,8 +23,10 @@ void bias_init( void );
 void clock_init(void);
 void delay_ms( volatile uint32_t );
 void delay_us( volatile uint32_t );
-void led_on( void );
-void led_off( void );
-void led_toggle( void );
+void si_init(void);
+void twi_init1(void);
+void twi_write_byte1( uint8_t);
+void tdelay( volatile uint32_t );
+void i2c_write( volatile uint8_t  , volatile uint8_t * , volatile uint8_t);
 
 #endif

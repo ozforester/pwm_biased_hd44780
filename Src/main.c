@@ -32,10 +32,10 @@ hd44780_init();
 hd44780_string("ozforester");
 delay_ms(270);
 etr_init();
+si_init();
 while(1)
 if( DataReady )
 	{
-	led_toggle();
         etps = 1 ;
         for( volatile uint8_t i = 0  ; i < ((TIM1->SMCR&TIM_SMCR_ETPS)>>12) ; i++ ) etps*=2 ;
         EtrFreq *= etps ;
@@ -52,10 +52,11 @@ if( DataReady )
                 hd44780_string("etps ");
                 hd44780_string(str);
 		}
-        if(EtrFreq < 12500000){ ETPS1 ; }
-        else if(EtrFreq < 25000000){ ETPS2 ; }
-        else if(EtrFreq < 50000000){ ETPS4 ; }
-        else{ ETPS8 ; }
+        //if(EtrFreq < 12500000){ ETPS1 ; }
+        //else if(EtrFreq < 25000000){ ETPS2 ; }
+        //else if(EtrFreq < 50000000){ ETPS4 ; }
+        //else{ ETPS8 ; }
+	ETPS2 ;
 	DataReady = 0 ;
 	}
 }
@@ -151,19 +152,12 @@ int bf( void ){
 }
 
 void hd44780_nibble( uint8_t data ){
-  if(data & 0b1000){ D7u }
-  else { D7d }
-  if(data & 0b0100){ D6u }
-  else { D6d }
-  if(data & 0b0010){ D5u }
-  else { D5d }
-  if(data & 0b0001){ D4u }
-  else { D4d }
-  delay_us(500);
-  Eu;
-  delay_us(500);
-  Ed;
-  delay_us(500);
+  if(data & 0b1000){ D7u }  else { D7d }
+  if(data & 0b0100){ D6u }  else { D6d }
+  if(data & 0b0010){ D5u }  else { D5d }
+  if(data & 0b0001){ D4u }  else { D4d }
+  delay_us(250);
+  Eu;  delay_us(50);  Ed;
 }
 
 void hd44780_data( uint8_t data ){
@@ -251,10 +245,10 @@ void bias_init( void ){ // pwm tim14 ch1 af4 pa4
 */
 
 void clock_init(void){ // HSE PLL 50 Mhz -------- MCO PA8 (18) AF AF0
-  RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
-  GPIOA->MODER &= ~GPIO_MODER_MODER8; // reset
-  GPIOA->MODER |= GPIO_MODER_MODER8_1; // AF
-  GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR8_1|GPIO_OSPEEDR_OSPEEDR8_0; // HIGH SPEED
+  //RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
+  //GPIOA->MODER &= ~GPIO_MODER_MODER8; // reset
+  //GPIOA->MODER |= GPIO_MODER_MODER8_1; // AF
+  //GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR8_1|GPIO_OSPEEDR_OSPEEDR8_0; // HIGH SPEED
   RCC->CR |= RCC_CR_HSEON ;
   while( !( RCC->CR & RCC_CR_HSERDY ) ) ; // wait hse ready
   RCC->CR &= ~RCC_CR_PLLON ;
@@ -269,35 +263,117 @@ void clock_init(void){ // HSE PLL 50 Mhz -------- MCO PA8 (18) AF AF0
   FLASH->ACR |= FLASH_ACR_LATENCY ;
   RCC->CFGR |= RCC_CFGR_SW_1 ;
   while ( !(RCC->CFGR & RCC_CFGR_SWS_1 ) );
-  RCC->CFGR |= RCC->CFGR |= RCC_CFGR_MCO_PLL|RCC_CFGR_PLLNODIV|RCC_CFGR_MCOPRE_DIV1 ; // MCO
+  //RCC->CFGR |= RCC_CFGR_MCO_PLL|RCC_CFGR_PLLNODIV|RCC_CFGR_MCOPRE_DIV1 ; // MCO
+}
+
+/*
+*     S I 5 3 5 1 A
+*/
+
+#define SI1 0x60
+
+void si_init(void){ // 28150000
+	twi_init1();
+        uint8_t d[32];
+        d[0]=3; d[1]=0xff; // disable all outputs
+        i2c_write( SI1 , d , 2 );
+        d[0]=149; d[1]=0x00; // disable spread
+        i2c_write( SI1 , d , 2 );
+        d[0]=16; d[1]=0xcf; // clk0 down
+        i2c_write( SI1 , d , 2 );
+        d[0]=26; // plla
+	d[1]=255; d[2]=255; d[3]=0; d[4]=10; d[5]=98; d[6]=253; d[7]=13; d[8]=226;
+        i2c_write( SI1 , d , 9 );
+        d[0]=42; // ms0
+        d[1]=255; d[2]=255; d[3]=0; d[4]=9; d[5]=0; d[6]=240; d[7]=0; d[8]=0;
+        i2c_write( SI1 , d , 9 );
+        d[0]=177; d[1]=0x20; // plla reset
+        i2c_write( SI1 , d , 2 );
+        d[0]=16; d[1]=0b01001111; // clk0 up src plla ms0 8mA
+        i2c_write( SI1 , &d[0] , 2 );
+        d[0]=3; d[1]=0b11111110; // enable clk0
+        i2c_write( SI1 , &d[0] , 2 );
+}
+
+/*
+* S W  I 2 C 1
+* SCL (PB0), SDA (PB1)
+*/
+
+//                             CNF/MODE
+#define rlsSCL1 GPIOB->MODER &= ~( 0b11 << 0 );
+#define pdnSCL1 GPIOB->MODER &= ~( 0b11 << 0 ); GPIOB->MODER |= ( 0b01 << 0 ); GPIOB->OTYPER |= ( 1 << 0 ); GPIOB->BRR |= ( 1 << 0 );
+#define rlsSDA1 GPIOB->MODER &= ~( 0b11 << 2 );
+#define pdnSDA1 GPIOB->MODER &= ~( 0b11 << 2 ); GPIOB->MODER |= ( 0b01 << 2 ); GPIOB->OTYPER |= ( 1 << 1 ); GPIOB->BRR |= ( 1 << 1 );
+
+void twi_init1(void){ // release
+  RCC->AHBENR |= (1<<18); // clock
+  rlsSDA1;
+  rlsSCL1;
+}
+
+#define TD1 2
+
+void twi_start1(void){
+  tdelay(TD1);
+  rlsSDA1;
+  tdelay(TD1);
+  rlsSCL1;
+  tdelay(TD1);
+  pdnSDA1;
+  tdelay(TD1);
+  pdnSCL1;
+  tdelay(TD1);
+}
+
+void twi_stop1(void){
+  tdelay(TD1);
+  rlsSCL1;
+  tdelay(TD1);
+  rlsSDA1;
+  tdelay(TD1);
+}
+
+void i2c_write( volatile uint8_t address , volatile uint8_t *data , volatile uint8_t size ){
+  twi_start1();
+  twi_write_byte1( (address << 1) );
+  for( uint8_t i = 0 ; i < size ; i++ ){
+    twi_write_byte1( *(data++) );
+  }
+ twi_stop1();
+}
+
+void twi_write_byte1( uint8_t twi_byte ){
+  for( uint8_t i = 0; i < 8; i++ ){
+  tdelay(TD1);
+  if(twi_byte&0b10000000) {rlsSDA1;}
+  else { pdnSDA1;}
+  tdelay(TD1);
+  rlsSCL1;
+  tdelay(TD1);
+  pdnSCL1;
+  twi_byte <<= 1;
+  }
+  tdelay(TD1); // pass ack
+  rlsSDA1;
+  tdelay(TD1);
+  rlsSCL1;
+  tdelay(TD1);
+  pdnSCL1;
+  tdelay(TD1);
+  pdnSDA1;
+  tdelay(TD1);
+}
+
+void tdelay( volatile uint32_t delay ){
+  for( volatile uint32_t i = 0; i < delay; i++ ){
+    }
 }
 
 
 /*
 *             U T I L I T I E S
 */
-
-void led_on( void ){
-RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
-GPIOA->MODER |= GPIO_MODER_MODER5_0; // out
-GPIOA->MODER |= GPIO_MODER_MODER6_0; // out
-GPIOA->BSRR  |= GPIO_BSRR_BS_5;
-GPIOA->BSRR  |= GPIO_BSRR_BR_6;
-}
-
-void led_off( void ){
-RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // clock port
-GPIOA->MODER |= GPIO_MODER_MODER5_0; // out
-GPIOA->MODER |= GPIO_MODER_MODER6_0; // out
-GPIOA->BSRR  |= GPIO_BSRR_BR_5;
-GPIOA->BSRR  |= GPIO_BSRR_BS_6;
-}
-
-void led_toggle(void)
-{
-if( GPIOA->IDR & GPIO_IDR_5 ) led_off() ;
-else led_on() ;
-}
 
 void delay_ms( volatile uint32_t d ){
   d *= 5000 ;
