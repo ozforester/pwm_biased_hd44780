@@ -4,3 +4,4 @@ tune bias with TIM14 duty cycle<br>
 freqmeter template, just for fun<br>
 ![plot](./schematics.png)
 ![plot](./breadboard.jpg)
+![plot](./2543.png)
